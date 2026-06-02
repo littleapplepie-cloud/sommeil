@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mes Applis Sommeil</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07080f;color:#eeeaf8;font-family:'Courier New',monospace;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.wrap{max-width:420px;width:100%;text-align:center}
+.moon{font-size:56px;margin-bottom:20px;display:block;animation:float 4s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+h1{font-size:28px;font-family:Georgia,serif;font-weight:400;margin-bottom:8px}
+h1 em{font-style:italic;color:#f0c060}
+p{font-size:12px;color:#6b6890;margin-bottom:36px;line-height:1.8}
+.cards{display:flex;flex-direction:column;gap:14px}
+.app-card{background:#141828;border:1px solid #1f2440;border-radius:14px;padding:22px;text-align:left;text-decoration:none;color:#eeeaf8;transition:all .2s;display:block}
+.app-card:hover{border-color:#a78bfa;transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.app-card .icon{font-size:28px;margin-bottom:10px;display:block}
+.app-card .name{font-family:Georgia,serif;font-size:18px;font-weight:400;margin-bottom:4px}
+.app-card .desc{font-size:11px;color:#6b6890;line-height:1.7}
+.stars{position:fixed;inset:0;z-index:0;pointer-events:none}
+.star{position:absolute;border-radius:50%;background:white;animation:tw var(--d) ease-in-out infinite}
+@keyframes tw{0%,100%{opacity:var(--a)}50%{opacity:var(--b)}}
+.wrap{position:relative;z-index:1}
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+<div class="wrap">
+  <span class="moon">🌙</span>
+  <h1>Mes applis<br><em>sommeil</em></h1>
+  <p>Toutes tes données restent sur ton appareil.<br>Rien n'est partagé.</p>
+  <div class="cards">
+    <a class="app-card" href="sommeil.html">
+      <span class="icon">📊</span>
+      <div class="name">Suivi du Sommeil</div>
+      <div class="desc">Enregistre tes nuits, analyse tes tendances, active le micro pour un suivi automatique avec réveil intelligent.</div>
+    </a>
+    <a class="app-card" href="cycles-sommeil.html">
+      <span class="icon">🔄</span>
+      <div class="name">Cycles de Sommeil</div>
+      <div class="desc">Calcule les meilleures heures pour te coucher ou te réveiller selon les cycles de 90 minutes.</div>
+    </a>
+  </div>
+</div>
+<script>
+const s=document.getElementById('stars');
+for(let i=0;i<100;i++){
+  const el=document.createElement('div');
+  el.className='star';
+  const sz=Math.random()*2+.5;
+  el.style.cssText=`width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${(Math.random()*4+2).toFixed(1)}s;--a:${(Math.random()*.5+.1).toFixed(2)};--b:${(Math.random()*.1).toFixed(2)};animation-delay:${(Math.random()*5).toFixed(1)}s`;
+  s.appendChild(el);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nuit — Suivi du Sommeil</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#08090d;--surface:#0f1018;--card:#13151f;--border:#1e2030;--border2:#262840;
+  --accent:#7b9cff;--accent2:#a78bfa;--accent3:#34d399;--moon:#e2c97e;--danger:#f87171;
+  --text:#e4e6f0;--muted:#5a5e78;--muted2:#3d4060;--r:8px;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 60% 40% at 10% 0%,rgba(60,80,180,.08) 0%,transparent 70%),
+    radial-gradient(ellipse 40% 60% at 90% 100%,rgba(100,60,180,.06) 0%,transparent 60%)}
+
+/* NAV */
+.nav{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;}
+.nav-tab{padding:12px 4px;font-family:'Courier New',monospace;font-size:10px;letter-spacing:0;text-transform:uppercase;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .2s;text-align:center;width:100%;-webkit-tap-highlight-color:rgba(123,156,255,.2);}
+.nav-tab:hover{color:var(--text)}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(123,156,255,.05)}
+
+/* LAYOUT */
+#app{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:0 16px 80px}
+.page{display:none;animation:fadeIn .3s ease}
+.page.active{display:block}
+.page-header{padding:32px 0 24px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.page-header h1{font-family:Georgia,serif;font-size:clamp(26px,5vw,40px);font-weight:300;letter-spacing:-.02em;line-height:1.1}
+.page-header h1 em{font-style:italic;color:var(--moon)}
+.page-subtitle{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:14px}
+.card-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
+.card-title span{color:var(--accent)}
+
+/* GRIDS */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:560px){.grid-4{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:1fr 1fr}}
+@media(max-width:400px){.grid-2{grid-template-columns:1fr}}
+
+/* FORM */
+.field{margin-bottom:16px}
+.field label{display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.field input,.field select,.field textarea{width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'Courier New',monospace;font-size:14px;padding:10px 12px;outline:none;transition:border-color .2s,box-shadow .2s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(123,156,255,.08)}
+.field select option{background:var(--card)}
+.field textarea{resize:vertical;min-height:70px;line-height:1.6}
+.field input[type=time]::-webkit-calendar-picker-indicator{filter:invert(.5) sepia(1) hue-rotate(200deg)}
+
+/* STARS */
+.stars{display:flex;gap:6px}
+.star{font-size:22px;cursor:pointer;color:var(--border2);transition:color .15s,transform .1s;user-select:none}
+.star:hover,.star.lit{color:var(--moon)}
+.star:hover{transform:scale(1.15)}
+
+/* SLIDER */
+.slider-wrap{display:flex;align-items:center;gap:12px}
+.slider-wrap input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:var(--border2);border-radius:3px;outline:none;cursor:pointer;padding:0;border:none;box-shadow:none}
+.slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 8px rgba(123,156,255,.4)}
+.slider-val{min-width:30px;text-align:right;font-size:14px;color:var(--accent)}
+
+/* PILLS */
+.pills{display:flex;flex-wrap:wrap;gap:8px}
+.pill{padding:6px 14px;border-radius:20px;font-size:11px;border:1px solid var(--border2);color:var(--muted);background:transparent;cursor:pointer;transition:all .18s;font-family:'Courier New',monospace}
+.pill:hover{border-color:var(--muted);color:var(--text)}
+.pill.on{border-color:var(--accent2);color:var(--accent2);background:rgba(167,139,250,.1)}
+
+/* BUTTONS */
+.btn{padding:11px 24px;border-radius:6px;font-family:'Courier New',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;border:none;transition:all .2s}
+.btn-primary{background:var(--accent);color:#08090d;font-weight:500;box-shadow:0 0 20px rgba(123,156,255,.25)}
+.btn-primary:hover{background:#96b0ff;transform:translateY(-1px)}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--muted);color:var(--text)}
+.btn-danger{background:transparent;border:1px solid rgba(248,113,113,.3);color:var(--danger)}
+.btn-danger:hover{background:rgba(248,113,113,.08)}
+
+/* STATS */
+.stat-chip{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;text-align:center}
+.stat-val{font-family:Georgia,serif;font-size:26px;font-weight:300;color:var(--text);line-height:1}
+.stat-unit{font-size:12px;color:var(--muted);margin-left:3px}
+.stat-label{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:5px}
+
+/* SLEEP BAR */
+.sleep-bar-wrap{margin:8px 0;background:var(--surface);border-radius:4px;height:28px;position:relative;overflow:hidden;border:1px solid var(--border)}
+.sleep-segment{position:absolute;height:100%;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.5)}
+.seg-deep{background:rgba(123,156,255,.65)}.seg-light{background:rgba(167,139,250,.35)}.seg-rem{background:rgba(52,211,153,.45)}.seg-awake{background:rgba(248,113,113,.25)}
+
+/* ENTRY LIST */
+.entry-item{display:flex;align-items:center;gap:14px;padding:12px 8px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;border-radius:4px}
+.entry-item:hover{background:rgba(255,255,255,.02)}
+.entry-item:last-child{border-bottom:none}
+.entry-date{font-size:11px;color:var(--muted);min-width:68px}
+.entry-main{flex:1}
+.entry-hours{font-family:Georgia,serif;font-size:20px;font-weight:300}
+.entry-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.entry-moods{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.entry-mood-tag{font-size:9px;padding:2px 8px;border-radius:10px;background:rgba(123,156,255,.1);color:var(--accent);border:1px solid rgba(123,156,255,.2)}
+
+/* CYCLE */
+.cycle-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.cycle-opt{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px}
+.cycle-opt.best{border-color:var(--accent3);background:rgba(52,211,153,.05)}
+.cycle-opt .time-val{color:var(--accent);font-weight:500}
+.cycle-opt.best .time-val{color:var(--accent3)}
+
+/* INSIGHTS */
+.insight-item{display:flex;gap:14px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:10px}
+.insight-icon{font-size:20px;min-width:28px;text-align:center;margin-top:2px}
+.insight-text{font-size:12px;color:var(--muted);line-height:1.7}
+.insight-text strong{color:var(--text);display:block;margin-bottom:3px;font-size:13px}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:12px 24px;font-size:12px;color:var(--accent);transition:transform .3s ease;z-index:999;box-shadow:0 0 20px rgba(123,156,255,.2);white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* EMPTY */
+.empty{text-align:center;padding:50px 20px;font-size:12px;color:var(--muted);line-height:2}
+.empty .empty-icon{font-size:44px;margin-bottom:14px}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:28px;max-width:320px;width:90%;text-align:center}
+.modal-box h3{font-family:Georgia,serif;font-weight:300;margin-bottom:12px;font-size:22px}
+.modal-box p{font-size:12px;color:var(--muted);margin-bottom:24px;line-height:1.7}
+.modal-actions{display:flex;gap:12px;justify-content:center}
+
+/* ===== MICRO PAGE ===== */
+.rec-center{text-align:center;padding:28px 16px}
+.rec-moon{font-size:68px;line-height:1;margin-bottom:14px;filter:drop-shadow(0 0 18px rgba(226,201,126,.3));transition:all .5s ease}
+.rec-moon.recording{animation:moonPulse 3s ease-in-out infinite}
+@keyframes moonPulse{0%,100%{filter:drop-shadow(0 0 18px rgba(226,201,126,.3));transform:scale(1)}50%{filter:drop-shadow(0 0 38px rgba(226,201,126,.6));transform:scale(1.05)}}
+.rec-timer{font-family:Georgia,serif;font-size:46px;font-weight:300;color:var(--text);letter-spacing:-.02em;margin:6px 0}
+.rec-label{font-size:12px;color:var(--muted);margin-bottom:4px}
+.rec-phase{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;padding:4px 14px;border-radius:20px;display:inline-block;margin:10px 0}
+.phase-awake{color:var(--danger);background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25)}
+.phase-light{color:var(--accent2);background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.25)}
+.phase-deep{color:var(--accent);background:rgba(123,156,255,.1);border:1px solid rgba(123,156,255,.25)}
+.phase-rem{color:var(--accent3);background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)}
+.noise-meter{width:240px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin:14px auto}
+.noise-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .15s ease}
+.btn-rec{width:72px;height:72px;border-radius:50%;border:none;font-size:24px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;margin:16px auto 8px}
+.btn-rec-start{background:var(--accent);color:#08090d;box-shadow:0 0 24px rgba(123,156,255,.4)}
+.btn-rec-start:hover{transform:scale(1.06);box-shadow:0 0 36px rgba(123,156,255,.55)}
+.btn-rec-stop{background:var(--danger);color:#fff;box-shadow:0 0 24px rgba(248,113,113,.4);animation:recPulse 1.5s ease-in-out infinite}
+@keyframes recPulse{0%,100%{box-shadow:0 0 20px rgba(248,113,113,.4)}50%{box-shadow:0 0 40px rgba(248,113,113,.7)}}
+.wakelock-badge{display:inline-flex;align-items:center;gap:6px;font-size:10px;padding:4px 12px;border-radius:20px;margin-top:6px}
+.wakelock-on{color:var(--accent3);background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)}
+.wakelock-off{color:var(--muted);background:var(--surface);border:1px solid var(--border)}
+.phase-chips{display:flex;gap:3px;flex-wrap:wrap;margin-top:10px;justify-content:center}
+.phase-chip{width:10px;height:10px;border-radius:2px}
+.chart-noise-wrap{height:90px;position:relative;margin-bottom:6px}
+.phase-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.phase-bar-row .lbl{min-width:120px;font-size:11px;color:var(--muted)}
+.phase-bar-row .track{flex:1;background:var(--border);border-radius:2px;height:5px;overflow:hidden}
+.phase-bar-row .fill{height:100%;border-radius:2px}
+.phase-bar-row .pct{min-width:34px;text-align:right;font-size:11px;color:var(--text)}
+
+/* ALARM RING */
+.alarm-ring{position:fixed;inset:0;z-index:500;background:rgba(8,9,13,.97);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+.alarm-ring.ringing{display:flex;animation:fadeIn .5s ease}
+.alarm-icon{font-size:80px;animation:ringBounce .45s ease-in-out infinite alternate}
+@keyframes ringBounce{from{transform:rotate(-12deg)}to{transform:rotate(12deg)}}
+.alarm-ring h2{font-family:Georgia,serif;font-size:32px;font-weight:300;margin:20px 0 8px}
+.alarm-ring p{font-size:12px;color:var(--muted);margin-bottom:28px;line-height:1.7;max-width:300px}
+
+/* ANIMATIONS */
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal-box">
+    <h3>Supprimer cette nuit ?</h3>
+    <p>Cette action est irréversible.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDeleteModal()">Annuler</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<div class="alarm-ring" id="alarmRing">
+  <div class="alarm-icon">⏰</div>
+  <h2>Réveil en douceur</h2>
+  <p id="alarm-ring-msg">Tu es en phase de sommeil léger — c'est le moment idéal pour te lever.</p>
+  <button class="btn btn-primary" style="padding:16px 40px;font-size:13px;" onclick="dismissAlarm()">Je me lève ✓</button>
+</div>
+
+<nav class="nav">
+  <button class="nav-tab active" id="tab-dashboard" ontouchstart="showPage('dashboard')" onclick="showPage('dashboard')">✦ Tableau</button>
+  <button class="nav-tab" id="tab-entry" ontouchstart="showPage('entry')" onclick="showPage('entry')">+ Saisir</button>
+  <button class="nav-tab" id="tab-micro" ontouchstart="showPage('micro')" onclick="showPage('micro')">🎙 Nuit</button>
+  <button class="nav-tab" id="tab-journal" ontouchstart="showPage('journal')" onclick="showPage('journal')">Journal</button>
+  <button class="nav-tab" id="tab-cycles" ontouchstart="showPage('cycles')" onclick="showPage('cycles')">Cycles</button>
+  <button class="nav-tab" id="tab-stats" ontouchstart="showPage('stats')" onclick="showPage('stats')">Stats</button>
+</nav>
+
+<div id="app">
+
+<!-- ========== DASHBOARD ========== -->
+<div class="page active" id="page-dashboard">
+  <div class="page-header">
+    <div><h1>Bonne <em>nuit</em> ✦</h1><p class="page-subtitle">Tes données restent sur cet appareil. Rien n'est partagé.</p></div>
+    <div id="dash-date" style="font-size:11px;color:var(--muted);text-align:right"></div>
+  </div>
+  <div class="grid-4" style="margin-bottom:14px">
+    <div class="stat-chip"><div class="stat-val" id="avg-hours">—</div><div class="stat-label">Moy. heures</div></div>
+    <div class="stat-chip"><div class="stat-val" id="avg-quality">—</div><div class="stat-label">Qualité moy.</div></div>
+    <div class="stat-chip"><div class="stat-val" id="avg-latency">—</div><div class="stat-label">Min. endo. moy.</div></div>
+    <div class="stat-chip"><div class="stat-val" id="total-nights">0</div><div class="stat-label">Nuits enreg.</div></div>
+  </div>
+  <div class="card"><div class="card-title">Dernière nuit</div><div id="last-night-content"><div class="empty"><div class="empty-icon">🌙</div>Aucune nuit. Va dans <strong>🎙 Nuit auto</strong> ou <strong>+ Saisir</strong>.</div></div></div>
+  <div class="card"><div class="card-title">7 derniers jours — <span>Durée & Qualité</span></div><div style="height:190px"><canvas id="chart-week"></canvas></div></div>
+  <div class="card" id="timeline-card" style="display:none">
+    <div class="card-title">Timeline — <span>Cycles estimés</span></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:10px;color:var(--muted)">
+      <span><span style="color:rgba(123,156,255,.8)">■</span> Profond</span>
+      <span><span style="color:rgba(167,139,250,.6)">■</span> Léger</span>
+      <span><span style="color:rgba(52,211,153,.7)">■</span> REM</span>
+      <span><span style="color:rgba(248,113,113,.5)">■</span> Éveil</span>
+    </div>
+    <div class="sleep-bar-wrap" id="sleep-timeline" style="height:38px"></div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:5px"><span id="tl-start">—</span><span id="tl-end">—</span></div>
+  </div>
+  <div class="card"><div class="card-title">Insights</div><div id="insights-list"><div class="empty" style="padding:20px"><div style="font-size:22px;margin-bottom:8px">💡</div>Ajoute 3+ nuits pour voir tes insights.</div></div></div>
+</div>
+
+<!-- ========== SAISIR ========== -->
+<div class="page" id="page-entry">
+  <div class="page-header"><div><h1>Saisir <em>une nuit</em></h1><p class="page-subtitle">Tout est optionnel sauf la date.</p></div></div>
+  <div class="card">
+    <div class="card-title">Date & Horaires</div>
+    <div class="grid-2">
+      <div class="field"><label>Date</label><input type="date" id="e-date"></div>
+      <div class="field"><label>Heure de coucher</label><input type="time" id="e-bedtime"></div>
+      <div class="field"><label>Heure de réveil</label><input type="time" id="e-waketime"></div>
+      <div class="field"><label>Endormissement (min)</label><div class="slider-wrap"><input type="range" min="0" max="120" value="15" id="e-latency" oninput="document.getElementById('e-latency-val').textContent=this.value"><span class="slider-val" id="e-latency-val">15</span></div></div>
+    </div>
+    <div class="field"><label>Réveils nocturnes</label><div class="slider-wrap"><input type="range" min="0" max="10" value="0" id="e-wakeups" oninput="document.getElementById('e-wakeups-val').textContent=this.value"><span class="slider-val" id="e-wakeups-val">0</span></div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Qualité & Humeur</div>
+    <div class="field"><label>Qualité globale</label><div class="stars" id="quality-stars"><span class="star" onclick="setStar(1)">★</span><span class="star" onclick="setStar(2)">★</span><span class="star" onclick="setStar(3)">★</span><span class="star" onclick="setStar(4)">★</span><span class="star" onclick="setStar(5)">★</span></div></div>
+    <div class="field"><label>Humeur au réveil</label><div class="pills" id="mood-pills">
+      <button class="pill" onclick="togglePill(this)">😴 Épuisé·e</button>
+      <button class="pill" onclick="togglePill(this)">😶 Vaseux·se</button>
+      <button class="pill" onclick="togglePill(this)">😐 Neutre</button>
+      <button class="pill" onclick="togglePill(this)">🙂 Reposé·e</button>
+      <button class="pill" onclick="togglePill(this)">⚡ Énergique</button>
+      <button class="pill" onclick="togglePill(this)">😟 Anxieux·se</button>
+      <button class="pill" onclick="togglePill(this)">🤕 Mal de tête</button>
+      <button class="pill" onclick="togglePill(this)">😌 Calme</button>
+    </div></div>
+    <div class="field"><label>Rêves / Cauchemars</label><div class="pills" id="dream-pills">
+      <button class="pill" onclick="toggleExcl(this,'dream-pills')">Aucun souvenir</button>
+      <button class="pill" onclick="toggleExcl(this,'dream-pills')">Rêves agréables</button>
+      <button class="pill" onclick="toggleExcl(this,'dream-pills')">Rêves neutres</button>
+      <button class="pill" onclick="toggleExcl(this,'dream-pills')">💀 Cauchemar</button>
+      <button class="pill" onclick="toggleExcl(this,'dream-pills')">✨ Rêve lucide</button>
+    </div></div>
+    <div class="field"><label>Note</label><textarea id="e-note" placeholder="Ce dont tu te souviens…"></textarea></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Facteurs du soir</div>
+    <div class="field"><label>Sport</label><div class="pills" id="sport-pills">
+      <button class="pill" onclick="toggleExcl(this,'sport-pills')">Aucun</button>
+      <button class="pill" onclick="toggleExcl(this,'sport-pills')">Léger</button>
+      <button class="pill" onclick="toggleExcl(this,'sport-pills')">Modéré</button>
+      <button class="pill" onclick="toggleExcl(this,'sport-pills')">Intense</button>
+      <button class="pill" onclick="toggleExcl(this,'sport-pills')">Intense le soir</button>
+    </div></div>
+    <div class="field"><label>Écrans avant de dormir</label><div class="pills" id="screens-pills">
+      <button class="pill" onclick="toggleExcl(this,'screens-pills')">Aucun</button>
+      <button class="pill" onclick="toggleExcl(this,'screens-pills')">Arrêt 1h avant</button>
+      <button class="pill" onclick="toggleExcl(this,'screens-pills')">Arrêt 30min avant</button>
+      <button class="pill" onclick="toggleExcl(this,'screens-pills')">Dans le lit</button>
+    </div></div>
+    <div class="grid-2">
+      <div class="field"><label>Alcool (verres)</label><div class="slider-wrap"><input type="range" min="0" max="8" value="0" id="e-alcohol" oninput="document.getElementById('e-alcohol-val').textContent=this.value"><span class="slider-val" id="e-alcohol-val">0</span></div></div>
+      <div class="field"><label>Stress du soir /5</label><div class="slider-wrap"><input type="range" min="1" max="5" value="2" id="e-stress" oninput="document.getElementById('e-stress-val').textContent=this.value"><span class="slider-val" id="e-stress-val">2</span></div></div>
+    </div>
+    <div class="field"><label>Autres</label><div class="pills" id="other-pills">
+      <button class="pill" onclick="togglePill(this)">☕ Caféine après-midi</button>
+      <button class="pill" onclick="togglePill(this)">🍽 Repas copieux</button>
+      <button class="pill" onclick="togglePill(this)">📖 Méditation / lecture</button>
+      <button class="pill" onclick="togglePill(this)">🛁 Bain chaud</button>
+      <button class="pill" onclick="togglePill(this)">🌡 Chambre chaude</button>
+      <button class="pill" onclick="togglePill(this)">🔊 Bruit</button>
+      <button class="pill" onclick="togglePill(this)">💊 Médicaments</button>
+    </div></div>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:32px">
+    <button class="btn btn-primary" onclick="saveEntry()">Enregistrer →</button>
+    <button class="btn btn-ghost" onclick="resetForm()">Réinitialiser</button>
+  </div>
+</div>
+
+<!-- ========== MICRO ========== -->
+<div class="page" id="page-micro">
+  <div class="page-header">
+    <div><h1>Nuit <em>automatique</em> 🎙</h1><p class="page-subtitle">Le micro analyse le son pour estimer tes phases. Rien n'est enregistré — seulement des valeurs numériques.</p></div>
+  </div>
+
+  <div class="card" style="border-color:rgba(226,201,126,.35)">
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:22px">🔒</div>
+      <div>
+        <div style="font-size:12px;color:var(--moon);margin-bottom:6px;font-weight:500">Confidentialité</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.8"><strong style="color:var(--text)">Aucun audio n'est enregistré ni stocké.</strong> L'appli mesure uniquement le volume sonore (un simple nombre). Tout reste dans ton navigateur, sur cet appareil. Rien ne sort.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Réglages du réveil</div>
+    <div class="field"><label>Heure limite de réveil</label><input type="time" id="alarm-time" value="07:30"></div>
+    <div class="field">
+      <label>Fenêtre de réveil intelligent (minutes avant la limite)</label>
+      <div class="slider-wrap">
+        <input type="range" min="10" max="60" value="30" id="alarm-window" oninput="document.getElementById('alarm-window-val').textContent=this.value">
+        <span class="slider-val" id="alarm-window-val">30</span>
+        <span style="font-size:11px;color:var(--muted)">min</span>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.7;padding:10px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border)">
+      Exemple : réveil limite 7h30, fenêtre 30min → l'appli te réveille entre 7h00 et 7h30 dès qu'elle détecte du sommeil léger.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Enregistrement</div>
+    <div class="rec-center">
+      <div class="rec-moon" id="rec-moon">🌙</div>
+      <div class="rec-label" id="rec-label">Prêt</div>
+      <div class="rec-timer" id="rec-timer">00:00:00</div>
+      <div id="rec-phase" class="rec-phase phase-awake" style="display:none">Éveil</div>
+      <div class="noise-meter"><div class="noise-fill" id="noise-fill" style="width:0%"></div></div>
+      <div id="wakelock-badge" class="wakelock-badge wakelock-off">● Écran libre</div>
+      <button class="btn-rec btn-rec-start" id="btn-rec" onclick="toggleRecording()">▶</button>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.7" id="rec-hint">Pose le téléphone sur ta table de nuit, micro vers le lit. Branche le chargeur.</div>
+      <div class="phase-chips" id="phase-chips"></div>
+    </div>
+  </div>
+
+  <div class="card" id="live-chart-card" style="display:none">
+    <div class="card-title">Activité sonore — <span>temps réel</span></div>
+    <div class="chart-noise-wrap"><canvas id="chart-noise"></canvas></div>
+  </div>
+
+  <div class="card" id="session-summary" style="display:none">
+    <div class="card-title">Résumé de la nuit</div>
+    <div id="session-summary-content"></div>
+    <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveSessionAsEntry()">Sauvegarder dans le journal →</button>
+      <button class="btn btn-ghost" onclick="resetRecording()">Nouvelle nuit</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Conseils</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="insight-item"><div class="insight-icon">📱</div><div class="insight-text"><strong>Position</strong>Table de nuit à 30–60 cm, micro dirigé vers le lit. Ne couvre pas le micro.</div></div>
+      <div class="insight-item"><div class="insight-icon">🔋</div><div class="insight-text"><strong>Batterie & veille</strong>Branche ton téléphone. L'appli active le <strong style="color:var(--accent3)">Wake Lock</strong> pour empêcher la mise en veille automatiquement — tu n'as rien à configurer.</div></div>
+      <div class="insight-item"><div class="insight-icon">🔇</div><div class="insight-text"><strong>Environnement</strong>Les 15 premières secondes calibrent le bruit ambiant de base. Pièce silencieuse = meilleure précision.</div></div>
+      <div class="insight-item"><div class="insight-icon">⚠️</div><div class="insight-text"><strong>Limite</strong>C'est une estimation basée sur le son — pas un EEG. Même méthode que Sleep Cycle et Sleep as Android, mais 100% privé.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== JOURNAL ========== -->
+<div class="page" id="page-journal">
+  <div class="page-header">
+    <div><h1>Journal <em>des nuits</em></h1></div>
+    <select id="journal-filter" onchange="renderJournal()" style="background:var(--card);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:11px;padding:7px 10px;border-radius:6px;outline:none">
+      <option value="all">Toutes</option>
+      <option value="good">Bonne qualité (4-5★)</option>
+      <option value="bad">Mauvaise (1-2★)</option>
+      <option value="nightmares">Cauchemars</option>
+    </select>
+  </div>
+  <div class="card"><div id="journal-list"></div></div>
+  <div id="entry-detail" style="display:none"></div>
+</div>
+
+<!-- ========== CYCLES ========== -->
+<div class="page" id="page-cycles">
+  <div class="page-header"><div><h1>Cycles <em>de sommeil</em></h1><p class="page-subtitle">Calcule le meilleur moment pour te réveiller.</p></div></div>
+  <div class="card">
+    <div class="card-title">Heure de réveil → à quelle heure se coucher ?</div>
+    <div class="field"><label>Heure de réveil souhaitée</label><input type="time" id="cycle-wake" value="07:00" oninput="calcBedtimes()"></div>
+    <div id="bedtime-results"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Heure de coucher → à quelle heure me réveiller ?</div>
+    <div class="field"><label>À quelle heure tu te couches ?</label><input type="time" id="cycle-bedtime" value="23:00" oninput="calcCycles()"></div>
+    <div class="field"><label>Temps d'endormissement (min)</label><div class="slider-wrap"><input type="range" min="5" max="60" value="15" id="cycle-latency" oninput="document.getElementById('cycle-lat-val').textContent=this.value;calcCycles()"><span class="slider-val" id="cycle-lat-val">15</span></div></div>
+    <div id="cycle-results"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Comment ça marche ?</div>
+    <div style="font-size:12px;color:var(--muted);line-height:2">
+      <p style="margin-bottom:10px">Ton sommeil se déroule en cycles d'environ <strong style="color:var(--text)">90 minutes</strong>, chacun composé de phases :</p>
+      <div class="grid-2" style="gap:8px">
+        <div style="background:var(--surface);border-radius:6px;padding:12px;border:1px solid var(--border)"><div style="color:var(--accent);font-size:11px;margin-bottom:4px">SOMMEIL LÉGER (N1-N2)</div><div style="font-size:11px">Transition. Facile à interrompre. Se réveiller ici = frais.</div></div>
+        <div style="background:var(--surface);border-radius:6px;padding:12px;border:1px solid var(--border)"><div style="color:var(--accent);font-size:11px;margin-bottom:4px">SOMMEIL PROFOND (N3)</div><div style="font-size:11px">Récupération physique. Se réveiller ici = grognon.</div></div>
+        <div style="background:var(--surface);border-radius:6px;padding:12px;border:1px solid var(--border)"><div style="color:var(--accent3);font-size:11px;margin-bottom:4px">REM</div><div style="font-size:11px">Rêves. Mémoire. Plus présent en fin de nuit.</div></div>
+        <div style="background:var(--surface);border-radius:6px;padding:12px;border:1px solid var(--border)"><div style="color:var(--moon);font-size:11px;margin-bottom:4px">LA CLÉ</div><div style="font-size:11px">Vise un réveil en fin de cycle (sommeil léger) pour te sentir reposé·e.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== STATS ========== -->
+<div class="page" id="page-stats">
+  <div class="page-header">
+    <div><h1>Statistiques <em>détaillées</em></h1></div>
+    <select id="stats-range" onchange="renderStats()" style="background:var(--card);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:11px;padding:7px 10px;border-radius:6px;outline:none">
+      <option value="14">14 jours</option>
+      <option value="30">30 jours</option>
+      <option value="90">3 mois</option>
+      <option value="all">Tout</option>
+    </select>
+  </div>
+  <div class="card"><div class="card-title">Durée du sommeil</div><div style="height:210px"><canvas id="chart-duration"></canvas></div></div>
+  <div class="card"><div class="card-title">Qualité du sommeil</div><div style="height:190px"><canvas id="chart-quality"></canvas></div></div>
+  <div class="grid-2">
+    <div class="card"><div class="card-title">Humeurs au réveil</div><div style="height:190px"><canvas id="chart-moods"></canvas></div></div>
+    <div class="card"><div class="card-title">Facteurs du soir</div><div style="height:190px"><canvas id="chart-factors"></canvas></div></div>
+  </div>
+  <div class="card"><div class="card-title">Corrélations — <span>impact sur la qualité</span></div><div id="correlations"></div></div>
+  <div class="card" style="border-color:rgba(248,113,113,.2)">
+    <div class="card-title" style="color:var(--danger)">Données</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7">Stockées uniquement en <strong style="color:var(--text)">localStorage</strong> — sur cet appareil, dans ce navigateur.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="exportData()">⬇ Exporter JSON</button>
+      <button class="btn btn-danger" onclick="clearAllData()">✕ Effacer tout</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+// ── STORAGE ─────────────────────────────────────────────────
+const STORE_KEY = 'nuit_v2';
+function loadData(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY))||[]; }catch{ return []; } }
+function saveData(a){ localStorage.setItem(STORE_KEY, JSON.stringify(a)); }
+let entries = loadData();
+
+// ── CHARTS ──────────────────────────────────────────────────
+let weekChart=null, durationChart=null, qualityChart=null, moodsChart=null, factorsChart=null, noiseChart=null;
+
+// ── NAV ─────────────────────────────────────────────────────
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  if(name==='dashboard') renderDashboard();
+  if(name==='journal')   renderJournal();
+  if(name==='cycles'){   calcCycles(); calcBedtimes(); }
+  if(name==='stats')     renderStats();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── TOAST ───────────────────────────────────────────────────
+function showToast(msg,dur=2800){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+// ── FORM ────────────────────────────────────────────────────
+let editStar=0;
+function setStar(n){
+  editStar=n;
+  document.querySelectorAll('#quality-stars .star').forEach((s,i)=>s.classList.toggle('lit',i<n));
+}
+function togglePill(el){ el.classList.toggle('on'); }
+function toggleExcl(el,groupId){
+  document.querySelectorAll('#'+groupId+' .pill').forEach(p=>p.classList.remove('on'));
+  el.classList.add('on');
+}
+function getPills(id){ return [...document.querySelectorAll('#'+id+' .pill.on')].map(p=>p.textContent.trim()); }
+function getExcl(id){ const el=document.querySelector('#'+id+' .pill.on'); return el?el.textContent.trim():null; }
+function initForm(){
+  document.getElementById('e-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('e-bedtime').value='';
+  document.getElementById('e-waketime').value='';
+  ['e-latency','e-wakeups','e-alcohol'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.value=id==='e-stress'?2:0;
+    document.getElementById(id+'-val').textContent=el.value;
+  });
+  document.getElementById('e-stress').value=2;
+  document.getElementById('e-stress-val').textContent=2;
+  document.getElementById('e-latency').value=15;
+  document.getElementById('e-latency-val').textContent=15;
+  document.getElementById('e-note').value='';
+  setStar(0);
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
+}
+function resetForm(){ initForm(); showToast('Réinitialisé'); }
+function saveEntry(){
+  const date=document.getElementById('e-date').value;
+  if(!date){showToast('⚠ Indique une date');return;}
+  const bedtime=document.getElementById('e-bedtime').value;
+  const waketime=document.getElementById('e-waketime').value;
+  let duration=null;
+  if(bedtime&&waketime){
+    const [bh,bm]=bedtime.split(':').map(Number);
+    const [wh,wm]=waketime.split(':').map(Number);
+    let m=(wh*60+wm)-(bh*60+bm); if(m<0)m+=1440; duration=m;
+  }
+  const entry={
+    id:Date.now(), date, bedtime, waketime, duration,
+    latency:parseInt(document.getElementById('e-latency').value),
+    wakeups:parseInt(document.getElementById('e-wakeups').value),
+    quality:editStar,
+    moods:getPills('mood-pills'), dream:getExcl('dream-pills'),
+    sport:getExcl('sport-pills'), screens:getExcl('screens-pills'),
+    alcohol:parseInt(document.getElementById('e-alcohol').value),
+    stress:parseInt(document.getElementById('e-stress').value),
+    other:getPills('other-pills'),
+    note:document.getElementById('e-note').value.trim()
+  };
+  entries.unshift(entry); saveData(entries);
+  showToast('✓ Nuit enregistrée !'); initForm(); showPage('dashboard');
+}
+
+// ── HELPERS ─────────────────────────────────────────────────
+function fmtDur(m){ if(!m&&m!==0)return'—'; return Math.floor(m/60)+'h'+(m%60>0?String(m%60).padStart(2,'0'):''); }
+function fmtDate(s){ return new Date(s+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'}); }
+function stars(n){ if(!n)return'—'; return'★'.repeat(n)+'☆'.repeat(5-n); }
+function avg(arr){ const v=arr.filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; }
+
+// ── CYCLE SIMULATION ────────────────────────────────────────
+function simCycles(bedtime,waketime,latency){
+  if(!bedtime||!waketime)return[];
+  const [bh,bm]=bedtime.split(':').map(Number);
+  const [wh,wm]=waketime.split(':').map(Number);
+  let total=(wh*60+wm)-(bh*60+bm); if(total<0)total+=1440;
+  const lat=latency||15; let elapsed=0; const segs=[{type:'awake',duration:lat}]; elapsed+=lat;
+  let cn=0;
+  while(elapsed<total){
+    const rem=total-elapsed; const cLen=Math.min(90,rem); cn++;
+    const deepR=Math.max(.05,.25-cn*.04); const remR=Math.min(.35,.05+cn*.06); const lightR=1-deepR-remR;
+    segs.push({type:'light',duration:Math.round(cLen*lightR*.5)});
+    segs.push({type:'deep', duration:Math.round(cLen*deepR)});
+    segs.push({type:'light',duration:Math.round(cLen*lightR*.5)});
+    segs.push({type:'rem',  duration:Math.round(cLen*remR)});
+    elapsed+=cLen;
+  }
+  return segs;
+}
+function renderTimeline(segs,total,containerId){
+  const tl=document.getElementById(containerId); if(!tl)return; tl.innerHTML='';
+  let elapsed=0;
+  segs.forEach(seg=>{
+    const pct=(seg.duration/total)*100;
+    const d=document.createElement('div');
+    d.className='sleep-segment seg-'+seg.type;
+    d.style.left=(elapsed/total*100)+'%'; d.style.width=pct+'%';
+    if(pct>8)d.textContent=seg.type==='deep'?'PROF':seg.type==='rem'?'REM':seg.type==='awake'?'Éveil':'';
+    tl.appendChild(d); elapsed+=seg.duration;
+  });
+}
+
+// ── DASHBOARD ───────────────────────────────────────────────
+function renderDashboard(){
+  document.getElementById('dash-date').textContent=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('total-nights').textContent=entries.length;
+  if(!entries.length){
+    document.getElementById('avg-hours').textContent='—';
+    document.getElementById('avg-quality').textContent='—';
+    document.getElementById('avg-latency').textContent='—';
+    document.getElementById('last-night-content').innerHTML='<div class="empty"><div class="empty-icon">🌙</div>Aucune nuit enregistrée.</div>';
+    document.getElementById('timeline-card').style.display='none';
+    renderWeekChart(); return;
+  }
+  const durs=entries.map(e=>e.duration).filter(x=>x);
+  const quals=entries.map(e=>e.quality).filter(x=>x);
+  const lats=entries.map(e=>e.latency).filter(x=>x>=0);
+  const aD=avg(durs),aQ=avg(quals),aL=avg(lats);
+  document.getElementById('avg-hours').innerHTML=aD?`${(aD/60).toFixed(1)}<span class="stat-unit">h</span>`:'—';
+  document.getElementById('avg-quality').innerHTML=aQ?`${aQ.toFixed(1)}<span class="stat-unit">★</span>`:'—';
+  document.getElementById('avg-latency').innerHTML=aL?`${Math.round(aL)}<span class="stat-unit">min</span>`:'—';
+  renderLastNight(entries[0]);
+  renderWeekChart();
+  renderInsights();
+}
+function renderLastNight(e){
+  const el=document.getElementById('last-night-content');
+  const tl=document.getElementById('timeline-card');
+  if(!e){el.innerHTML='<div class="empty"><div class="empty-icon">🌙</div>Aucune nuit.</div>';tl.style.display='none';return;}
+  const dur=e.duration?`<span style="color:var(--accent);font-family:Georgia,serif;font-size:26px;font-weight:300">${fmtDur(e.duration)}</span>`:'<span style="color:var(--muted)">Durée non renseignée</span>';
+  const moods=(e.moods||[]).map(m=>`<span class="entry-mood-tag">${m}</span>`).join('');
+  el.innerHTML=`
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:5px">${fmtDate(e.date)}</div>
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">${dur}
+        ${e.quality?`<span style="color:var(--moon)">${stars(e.quality)}</span>`:''}
+        ${e.bedtime&&e.waketime?`<span style="font-size:12px;color:var(--muted)">${e.bedtime} → ${e.waketime}</span>`:''}
+      </div>
+    </div>
+    ${moods?`<div class="entry-moods" style="margin-bottom:8px">${moods}</div>`:''}
+    ${e.dream?`<div style="font-size:11px;color:var(--muted);margin-bottom:5px">💭 ${e.dream}</div>`:''}
+    ${e.note?`<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.6;border-left:2px solid var(--border2);padding-left:12px;margin-top:8px">${e.note}</div>`:''}`;
+  if(e.bedtime&&e.waketime&&e.duration){
+    tl.style.display='block';
+    const segs=simCycles(e.bedtime,e.waketime,e.latency);
+    renderTimeline(segs,e.duration+(e.latency||15),'sleep-timeline');
+    document.getElementById('tl-start').textContent=e.bedtime;
+    document.getElementById('tl-end').textContent=e.waketime;
+  } else { tl.style.display='none'; }
+}
+function renderWeekChart(){
+  const last7=[...entries].slice(0,7).reverse();
+  const ctx=document.getElementById('chart-week').getContext('2d');
+  if(weekChart)weekChart.destroy();
+  weekChart=new Chart(ctx,{type:'bar',data:{
+    labels:last7.map(e=>fmtDate(e.date)),
+    datasets:[
+      {label:'Durée (h)',data:last7.map(e=>e.duration?+(e.duration/60).toFixed(2):null),backgroundColor:'rgba(123,156,255,.3)',borderColor:'rgba(123,156,255,.8)',borderWidth:1,borderRadius:4,yAxisID:'y'},
+      {label:'Qualité',data:last7.map(e=>e.quality||null),type:'line',borderColor:'rgba(226,201,126,.8)',backgroundColor:'rgba(226,201,126,.1)',pointBackgroundColor:'rgba(226,201,126,.9)',pointRadius:4,tension:.4,yAxisID:'y2',fill:false}
+    ]},options:chartOpts({y:{max:12},y2:{max:5,position:'right'}})});
+}
+function renderInsights(){
+  if(entries.length<3)return;
+  const el=document.getElementById('insights-list'); const tips=[];
+  const aD=avg(entries.filter(e=>e.duration).map(e=>e.duration));
+  if(aD&&aD<360)tips.push({i:'⚠️',t:'Durée insuffisante',d:`Moy. ${fmtDur(Math.round(aD))} — recommandé 7-9h.`});
+  else if(aD&&aD>=420)tips.push({i:'✓',t:'Bonne durée',d:`Moy. ${fmtDur(Math.round(aD))} — bien joué !`});
+  const wA=entries.filter(e=>e.alcohol>0&&e.quality),woA=entries.filter(e=>e.alcohol===0&&e.quality);
+  if(wA.length>=2&&woA.length>=2){const q1=avg(wA.map(e=>e.quality)),q2=avg(woA.map(e=>e.quality));if(q2-q1>.5)tips.push({i:'🍷',t:'Alcool & qualité',d:`Sans alcool : ${q2.toFixed(1)}★ vs avec : ${q1.toFixed(1)}★.`});}
+  const aL=avg(entries.filter(e=>e.latency).map(e=>e.latency));
+  if(aL>30)tips.push({i:'⏱',t:'Endormissement difficile',d:`Moy. ${Math.round(aL)} min — au-delà de 20 min, c'est à travailler.`});
+  const hS=entries.filter(e=>e.stress>=4&&e.quality);
+  if(hS.length>=2)tips.push({i:'😰',t:'Impact du stress',d:`Les soirs stressés : ${avg(hS.map(e=>e.quality)).toFixed(1)}★ en moyenne.`});
+  if(!tips.length)tips.push({i:'✨',t:'Continue !',d:'Ajoute plus de nuits pour des insights personnalisés.'});
+  el.innerHTML=tips.map(t=>`<div class="insight-item"><div class="insight-icon">${t.i}</div><div class="insight-text"><strong>${t.t}</strong>${t.d}</div></div>`).join('');
+}
+
+// ── JOURNAL ─────────────────────────────────────────────────
+let pendingDeleteId=null;
+function renderJournal(){
+  const f=document.getElementById('journal-filter').value;
+  let list=[...entries];
+  if(f==='good')list=list.filter(e=>e.quality>=4);
+  else if(f==='bad')list=list.filter(e=>e.quality<=2&&e.quality>0);
+  else if(f==='nightmares')list=list.filter(e=>e.dream&&e.dream.includes('Cauchemar'));
+  const el=document.getElementById('journal-list');
+  if(!list.length){el.innerHTML='<div class="empty"><div class="empty-icon">📖</div>Aucune entrée.</div>';return;}
+  el.innerHTML=list.map(e=>`
+    <div class="entry-item" onclick="showEntryDetail(${e.id})">
+      <div class="entry-date">${fmtDate(e.date)}</div>
+      <div class="entry-main">
+        <div class="entry-hours">${e.duration?fmtDur(e.duration):'—'}${e.bedtime&&e.waketime?`<span style="font-size:11px;color:var(--muted);margin-left:8px">${e.bedtime}→${e.waketime}</span>`:''}</div>
+        <div class="entry-sub">${e.latency?`⏱ ${e.latency}min`:''} ${e.wakeups?`· ${e.wakeups} réveil(s)`:''} ${e.dream?`· ${e.dream}`:''}</div>
+        <div class="entry-moods">${(e.moods||[]).map(m=>`<span class="entry-mood-tag">${m}</span>`).join('')}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="color:var(--moon);font-size:13px">${stars(e.quality)}</div>
+        <button onclick="event.stopPropagation();openDeleteModal(${e.id})" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;margin-top:5px">✕</button>
+      </div>
+    </div>`).join('');
+}
+function showEntryDetail(id){
+  const e=entries.find(x=>x.id===id); if(!e)return;
+  const d=document.getElementById('entry-detail');
+  const segs=(e.bedtime&&e.waketime)?simCycles(e.bedtime,e.waketime,e.latency):[];
+  const total=e.duration?e.duration+(e.latency||15):0;
+  d.style.display='block';
+  d.innerHTML=`<div class="card" style="border-color:var(--accent);margin-top:6px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-family:Georgia,serif;font-size:20px;font-weight:300">${fmtDate(e.date)}</div>
+      <button class="btn btn-ghost" style="padding:6px 12px;font-size:10px" onclick="document.getElementById('entry-detail').style.display='none'">Fermer</button>
+    </div>
+    <div class="grid-2" style="margin-bottom:14px">
+      <div><div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Durée</div><div style="font-size:20px;font-family:Georgia,serif;font-weight:300">${fmtDur(e.duration)}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Qualité</div><div style="font-size:17px;color:var(--moon)">${stars(e.quality)}</div></div>
+    </div>
+    ${segs.length?`<div style="margin-bottom:14px"><div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Timeline estimée</div><div class="sleep-bar-wrap" id="dtl-tl" style="height:34px"></div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px"><span>${e.bedtime}</span><span>${e.waketime}</span></div></div>`:''}
+    ${e.moods.length?`<div style="margin-bottom:10px"><div class="entry-moods">${e.moods.map(m=>`<span class="entry-mood-tag">${m}</span>`).join('')}</div></div>`:''}
+    ${e.dream?`<div style="font-size:11px;color:var(--muted);margin-bottom:5px">💭 ${e.dream}</div>`:''}
+    ${e.sport?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">🏃 ${e.sport}</div>`:''}
+    ${e.alcohol>0?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">🍷 Alcool : ${e.alcohol}</div>`:''}
+    ${e.stress?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">😰 Stress : ${e.stress}/5</div>`:''}
+    ${e.note?`<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.6;border-left:2px solid var(--border2);padding-left:12px;margin-top:8px">${e.note}</div>`:''}
+  </div>`;
+  d.scrollIntoView({behavior:'smooth',block:'start'});
+  if(segs.length){ setTimeout(()=>renderTimeline(segs,total,'dtl-tl'),50); }
+}
+function openDeleteModal(id){ pendingDeleteId=id; document.getElementById('deleteModal').classList.add('open'); }
+function closeDeleteModal(){ pendingDeleteId=null; document.getElementById('deleteModal').classList.remove('open'); }
+function confirmDelete(){ entries=entries.filter(e=>e.id!==pendingDeleteId); saveData(entries); closeDeleteModal(); renderJournal(); showToast('Supprimé'); }
+
+// ── CYCLES ──────────────────────────────────────────────────
+function calcCycles(){
+  const bt=document.getElementById('cycle-bedtime').value;
+  const lat=parseInt(document.getElementById('cycle-latency').value)||15;
+  if(!bt)return;
+  const [h,m]=bt.split(':').map(Number); const asleep=h*60+m+lat;
+  const el=document.getElementById('cycle-results');
+  let html='<div class="cycle-list">';
+  [4,5,6].forEach(c=>{
+    const wm=asleep+c*90; const wh=Math.floor(wm/60)%24; const wmin=wm%60;
+    const t=String(wh).padStart(2,'0')+':'+String(wmin).padStart(2,'0');
+    const best=c===5;
+    html+=`<div class="cycle-opt ${best?'best':''}">
+      <div><span class="time-val" style="font-size:17px">${t}</span><span style="margin-left:10px;color:var(--muted);font-size:11px">${c} cycles · ${fmtDur(c*90)}</span>${best?'<span style="color:var(--accent3);font-size:10px;margin-left:8px">✓ idéal</span>':''}</div>
+      <span style="font-size:11px;color:var(--muted)">${c===4?'min':c===5?'optimal':'confort'}</span>
+    </div>`;
+  });
+  html+='</div>'; el.innerHTML=html;
+}
+function calcBedtimes(){
+  const wt=document.getElementById('cycle-wake').value; if(!wt)return;
+  const [h,m]=wt.split(':').map(Number); const wake=h*60+m;
+  const el=document.getElementById('bedtime-results'); let html='<div class="cycle-list">';
+  [4,5,6].forEach(c=>{
+    let bm=wake-c*90-15; let bh=Math.floor(bm/60); bm=bm%60;
+    if(bh<0)bh+=24; if(bm<0){bm+=60;bh=(bh-1+24)%24;}
+    const t=String(bh).padStart(2,'0')+':'+String(bm).padStart(2,'0');
+    const best=c===5;
+    html+=`<div class="cycle-opt ${best?'best':''}">
+      <div><span class="time-val" style="font-size:17px">${t}</span><span style="margin-left:10px;color:var(--muted);font-size:11px">${c} cycles · ${fmtDur(c*90)}</span>${best?'<span style="color:var(--accent3);font-size:10px;margin-left:8px">✓ idéal</span>':''}</div>
+      <span style="font-size:11px;color:var(--muted)">coucher</span>
+    </div>`;
+  });
+  html+='</div>'; el.innerHTML=html;
+}
+
+// ── STATS ───────────────────────────────────────────────────
+function chartOpts(axes){
+  const o={responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#5a5e78',font:{family:'Inconsolata',size:11},boxWidth:12}},tooltip:{backgroundColor:'#13151f',borderColor:'#1e2030',borderWidth:1,titleColor:'#e4e6f0',bodyColor:'#5a5e78',titleFont:{family:'Inconsolata'},bodyFont:{family:'Inconsolata'}}},scales:{}};
+  if(axes){
+    if(axes.y)o.scales.y={ticks:{color:'#5a5e78',font:{family:'Inconsolata',size:10}},grid:{color:'#1e2030'},max:axes.y.max};
+    if(axes.y2)o.scales.y2={position:axes.y2.position||'right',ticks:{color:'#5a5e78',font:{family:'Inconsolata',size:10}},grid:{display:false},max:axes.y2.max};
+    o.scales.x={ticks:{color:'#5a5e78',font:{family:'Inconsolata',size:10},maxRotation:45},grid:{color:'#1e2030'}};
+  }
+  return o;
+}
+function renderStats(){
+  const range=document.getElementById('stats-range').value;
+  let data=[...entries];
+  if(range!=='all'){const cut=new Date();cut.setDate(cut.getDate()-parseInt(range));data=data.filter(e=>new Date(e.date)>=cut);}
+  data.reverse();
+  const labels=data.map(e=>fmtDate(e.date));
+  // duration
+  const dCtx=document.getElementById('chart-duration').getContext('2d');
+  if(durationChart)durationChart.destroy();
+  durationChart=new Chart(dCtx,{type:'bar',data:{labels,datasets:[{label:'Durée (h)',data:data.map(e=>e.duration?+(e.duration/60).toFixed(2):null),backgroundColor:data.map(e=>{if(!e.duration)return'rgba(90,94,120,.3)';const h=e.duration/60;return h>=7?'rgba(52,211,153,.4)':h>=6?'rgba(226,201,126,.4)':'rgba(248,113,113,.4)';}),borderColor:'rgba(123,156,255,.4)',borderWidth:1,borderRadius:4},{type:'line',label:'7h',data:data.map(()=>7),borderColor:'rgba(52,211,153,.3)',borderDash:[4,4],borderWidth:1,pointRadius:0,fill:false}]},options:chartOpts({y:{max:12}})});
+  // quality
+  const qCtx=document.getElementById('chart-quality').getContext('2d');
+  if(qualityChart)qualityChart.destroy();
+  qualityChart=new Chart(qCtx,{type:'line',data:{labels,datasets:[{label:'Qualité ★',data:data.map(e=>e.quality||null),borderColor:'rgba(226,201,126,.8)',backgroundColor:'rgba(226,201,126,.08)',pointBackgroundColor:'rgba(226,201,126,.9)',pointRadius:4,tension:.4,fill:true}]},options:chartOpts({y:{max:5}})});
+  // moods
+  const mc={};data.forEach(e=>(e.moods||[]).forEach(m=>{mc[m]=(mc[m]||0)+1;}));
+  const mCtx=document.getElementById('chart-moods').getContext('2d');
+  if(moodsChart)moodsChart.destroy();
+  moodsChart=new Chart(mCtx,{type:'doughnut',data:{labels:Object.keys(mc),datasets:[{data:Object.values(mc),backgroundColor:['rgba(123,156,255,.7)','rgba(167,139,250,.7)','rgba(52,211,153,.7)','rgba(226,201,126,.7)','rgba(248,113,113,.7)','rgba(251,191,36,.7)','rgba(34,211,238,.7)','rgba(244,114,182,.7)'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#5a5e78',font:{family:'Inconsolata',size:10},boxWidth:10}},tooltip:{backgroundColor:'#13151f',borderColor:'#1e2030',borderWidth:1,bodyFont:{family:'Inconsolata'}}}}});
+  // factors
+  const fm={};data.forEach(e=>{if(e.sport)fm[e.sport]=(fm[e.sport]||0)+1;if(e.screens)fm[e.screens]=(fm[e.screens]||0)+1;(e.other||[]).forEach(o=>{fm[o]=(fm[o]||0)+1;});if(e.alcohol>0)fm['Alcool']=(fm['Alcool']||0)+1;});
+  const fL=Object.keys(fm).slice(0,8),fD=fL.map(k=>fm[k]);
+  const fCtx=document.getElementById('chart-factors').getContext('2d');
+  if(factorsChart)factorsChart.destroy();
+  factorsChart=new Chart(fCtx,{type:'bar',data:{labels:fL,datasets:[{label:'Occurrences',data:fD,backgroundColor:'rgba(167,139,250,.4)',borderColor:'rgba(167,139,250,.7)',borderWidth:1,borderRadius:3}]},options:{...chartOpts({}),indexAxis:'y'}});
+  // correlations
+  const corrs=[];
+  [{key:'alcohol',fn:e=>e.alcohol>0,label:'Alcool'},{key:'sport',fn:e=>e.sport&&e.sport.includes('ntense'),label:'Sport intense'},{key:'screens',fn:e=>e.screens&&e.screens.includes('lit'),label:'Écrans dans le lit'},{key:'stress',fn:e=>e.stress>=4,label:'Stress élevé'},{key:'med',fn:e=>(e.other||[]).some(o=>o.includes('éditation')),label:'Méditation / lecture'}].forEach(f=>{
+    const w=data.filter(e=>f.fn(e)&&e.quality),wo=data.filter(e=>!f.fn(e)&&e.quality);
+    if(w.length<2||wo.length<2)return;
+    const q1=avg(w.map(e=>e.quality)),q2=avg(wo.map(e=>e.quality));
+    corrs.push({label:f.label,diff:q1-q2,n:w.length});
+  });
+  const cEl=document.getElementById('correlations');
+  if(!corrs.length){cEl.innerHTML='<div style="font-size:12px;color:var(--muted);padding:16px 0">Ajoute plus de nuits avec facteurs renseignés.</div>';return;}
+  corrs.sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff));
+  cEl.innerHTML=corrs.map(c=>{
+    const isPos=c.diff>0,color=isPos?'var(--accent3)':'var(--danger)',icon=isPos?'↑':'↓',pct=Math.min(100,Math.abs(c.diff)/4*100);
+    return`<div class="phase-bar-row" style="margin-bottom:12px"><div class="lbl">${c.label}</div><div class="track"><div class="fill" style="width:${pct}%;background:${color}"></div></div><div class="pct" style="color:${color}">${icon} ${Math.abs(c.diff).toFixed(1)}★ (${c.n})</div></div>`;
+  }).join('');
+}
+function exportData(){
+  const b=new Blob([JSON.stringify(entries,null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(b),a=document.createElement('a');
+  a.href=u;a.download=`nuit-${new Date().toISOString().split('T')[0]}.json`;a.click();
+  showToast('Exporté !');
+}
+function clearAllData(){ if(!confirm('Effacer tout ? Irréversible.'))return; entries=[];saveData(entries);showToast('Effacé');renderDashboard(); }
+
+// ═══════════════════════════════════════════════════════════
+// MICRO — ANALYSE SONORE 100% LOCALE
+// Aucun audio n'est enregistré. Seulement des valeurs RMS (nombres).
+// Wake Lock API intégrée pour maintenir l'écran actif.
+// ═══════════════════════════════════════════════════════════
+
+let audioCtx=null,analyser=null,microStream=null;
+let recInterval=null,alarmInterval=null,timerInterval=null;
+let isRecording=false,recStartTime=null,recStartBedtime=null;
+let noiseSamples=[],baselineRMS=null,phaseHistory=[];
+let alarmTime=null,alarmFired=false,alarmWindowMin=30;
+let wakeLock=null;
+
+const SAMPLE_MS=2000, MAX_SAMPLES=300, PHASE_WIN=8, BASELINE_N=15;
+
+// ── WAKE LOCK ────────────────────────────────────────────────
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)){updateWakeLockBadge(false);return;}
+  try{
+    wakeLock=await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release',()=>{updateWakeLockBadge(false);});
+    updateWakeLockBadge(true);
+    // Re-acquire if released (page visibility change)
+    document.addEventListener('visibilitychange',async()=>{
+      if(wakeLock!==null&&document.visibilityState==='visible'&&isRecording){
+        try{wakeLock=await navigator.wakeLock.request('screen');updateWakeLockBadge(true);}catch(e){}
+      }
+    });
+  }catch(e){ updateWakeLockBadge(false); }
+}
+function releaseWakeLock(){ if(wakeLock){wakeLock.release();wakeLock=null;} updateWakeLockBadge(false); }
+function updateWakeLockBadge(on){
+  const el=document.getElementById('wakelock-badge');
+  if(!el)return;
+  el.className='wakelock-badge '+(on?'wakelock-on':'wakelock-off');
+  el.innerHTML=on?'● Écran maintenu actif (Wake Lock)':'● Écran libre';
+}
+
+// ── START / STOP ─────────────────────────────────────────────
+async function toggleRecording(){ isRecording?stopRecording():await startRecording(); }
+
+async function startRecording(){
+  try{ microStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false}); }
+  catch(e){ showToast('⚠ Micro refusé — vérifie les permissions'); return; }
+
+  await requestWakeLock();
+
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  analyser=audioCtx.createAnalyser(); analyser.fftSize=2048;
+  audioCtx.createMediaStreamSource(microStream).connect(analyser);
+
+  isRecording=true; recStartTime=Date.now();
+  recStartBedtime=new Date().toTimeString().slice(0,5);
+  noiseSamples=[]; baselineRMS=null; phaseHistory=[]; alarmFired=false;
+
+  const av=document.getElementById('alarm-time').value;
+  alarmWindowMin=parseInt(document.getElementById('alarm-window').value)||30;
+  if(av){
+    const [ah,am]=av.split(':').map(Number);
+    alarmTime=new Date(); alarmTime.setHours(ah,am,0,0);
+    if(alarmTime<=new Date()) alarmTime.setDate(alarmTime.getDate()+1);
+  }
+
+  document.getElementById('live-chart-card').style.display='block';
+  document.getElementById('session-summary').style.display='none';
+  initNoiseChart();
+
+  recInterval=setInterval(sampleNoise,SAMPLE_MS);
+  alarmInterval=setInterval(checkAlarm,30000);
+  timerInterval=setInterval(updateTimerDisplay,1000);
+
+  updateRecUI(); showToast('🎙 Bonne nuit !',3000);
+}
+
+function stopRecording(){
+  isRecording=false;
+  clearInterval(recInterval); clearInterval(alarmInterval); clearInterval(timerInterval);
+  releaseWakeLock();
+  if(microStream){microStream.getTracks().forEach(t=>t.stop());microStream=null;}
+  if(audioCtx){audioCtx.close();audioCtx=null;}
+  updateRecUI(); showSessionSummary();
+}
+
+function resetRecording(){
+  noiseSamples=[];phaseHistory=[];baselineRMS=null;
+  document.getElementById('session-summary').style.display='none';
+  document.getElementById('live-chart-card').style.display='none';
+  document.getElementById('rec-phase').style.display='none';
+  document.getElementById('rec-timer').textContent='00:00:00';
+  document.getElementById('phase-chips').innerHTML='';
+  updateRecUI();
+}
+
+// ── SAMPLE ───────────────────────────────────────────────────
+function sampleNoise(){
+  if(!analyser)return;
+  const buf=new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  let ss=0; for(let i=0;i<buf.length;i++)ss+=buf[i]*buf[i];
+  const rms=Math.sqrt(ss/buf.length);
+  if(noiseSamples.length<BASELINE_N) baselineRMS=baselineRMS===null?rms:baselineRMS*.9+rms*.1;
+  const t=Date.now()-recStartTime;
+  const phase=classifyPhase(rms,t);
+  noiseSamples.push({t,rms,phase});
+  if(noiseSamples.length>MAX_SAMPLES)noiseSamples.shift();
+  phaseHistory.push(phase);
+  updateNoiseMeter(rms); updateNoiseChart(t,rms); updatePhaseDisplay(phase);
+}
+
+function classifyPhase(rms,elapsedMs){
+  const base=baselineRMS||.001; const ratio=rms/Math.max(base,.00001); const min=elapsedMs/60000;
+  if(min<5)return'awake';
+  const rec=noiseSamples.slice(-PHASE_WIN).map(s=>s.rms);
+  const mean=rec.length?rec.reduce((a,b)=>a+b,0)/rec.length:rms;
+  const std=rec.length>2?Math.sqrt(rec.reduce((a,b)=>a+(b-mean)**2,0)/rec.length):0;
+  if(ratio>4||std>base*2)return'awake';
+  if(ratio>1.8||std>base*.8)return'light';
+  if(ratio<.5&&std<base*.3){ if(min>90&&min%90<30)return'rem'; return'deep'; }
+  return'light';
+}
+
+// ── ALARM ────────────────────────────────────────────────────
+function checkAlarm(){
+  if(!alarmTime||alarmFired||!isRecording)return;
+  const now=new Date(); const msTo=alarmTime-now;
+  if(msTo<0){triggerAlarm('Heure limite atteinte !');return;}
+  if(msTo<=alarmWindowMin*60000){
+    const last=phaseHistory.slice(-4);
+    if(last.filter(p=>p==='light'||p==='awake').length>=2) triggerAlarm('Tu es en sommeil léger — réveil en douceur ✦');
+  }
+}
+function triggerAlarm(msg){
+  alarmFired=true;
+  document.getElementById('alarm-ring-msg').textContent=msg;
+  document.getElementById('alarmRing').classList.add('ringing');
+  try{
+    const ctx=new AudioContext();
+    const notes=[392,440,494,523,587,659];
+    notes.forEach((f,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.frequency.value=f; o.type='sine';
+      g.gain.setValueAtTime(0,ctx.currentTime+i*.5);
+      g.gain.linearRampToValueAtTime(.25,ctx.currentTime+i*.5+.1);
+      g.gain.linearRampToValueAtTime(0,ctx.currentTime+i*.5+.4);
+      o.start(ctx.currentTime+i*.5); o.stop(ctx.currentTime+i*.5+.5);
+    });
+    setTimeout(()=>notes.forEach((f,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=f;o.type='sine';g.gain.setValueAtTime(0,ctx.currentTime+i*.5);g.gain.linearRampToValueAtTime(.25,ctx.currentTime+i*.5+.1);g.gain.linearRampToValueAtTime(0,ctx.currentTime+i*.5+.4);o.start(ctx.currentTime+i*.5);o.stop(ctx.currentTime+i*.5+.5);}),4000);
+  }catch(e){}
+}
+function dismissAlarm(){ document.getElementById('alarmRing').classList.remove('ringing'); stopRecording(); }
+
+// ── UI ────────────────────────────────────────────────────────
+function updateRecUI(){
+  const btn=document.getElementById('btn-rec');
+  const moon=document.getElementById('rec-moon');
+  const label=document.getElementById('rec-label');
+  const hint=document.getElementById('rec-hint');
+  if(isRecording){
+    btn.textContent='■'; btn.className='btn-rec btn-rec-stop';
+    moon.classList.add('recording'); label.textContent='Enregistrement en cours…';
+    hint.textContent='Appuie sur ■ pour arrêter';
+  } else {
+    btn.textContent='▶'; btn.className='btn-rec btn-rec-start';
+    moon.classList.remove('recording');
+    label.textContent=noiseSamples.length?'Terminé':'Prêt';
+    hint.textContent='Pose le téléphone sur ta table de nuit · Branche le chargeur';
+    document.getElementById('rec-phase').style.display='none';
+  }
+}
+function updateTimerDisplay(){
+  if(!recStartTime)return;
+  const e=Math.floor((Date.now()-recStartTime)/1000);
+  const h=Math.floor(e/3600),m=Math.floor((e%3600)/60),s=e%60;
+  document.getElementById('rec-timer').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function updateNoiseMeter(rms){
+  const base=baselineRMS||.001;
+  document.getElementById('noise-fill').style.width=Math.min(100,(rms/(base*5))*100)+'%';
+}
+function updatePhaseDisplay(phase){
+  const el=document.getElementById('rec-phase');
+  el.style.display='inline-block'; el.className='rec-phase phase-'+phase;
+  el.textContent={awake:'Éveil',light:'Sommeil léger',deep:'Sommeil profond',rem:'REM'}[phase]||phase;
+  const chips=document.getElementById('phase-chips');
+  const col={awake:'rgba(248,113,113,.5)',light:'rgba(167,139,250,.5)',deep:'rgba(123,156,255,.6)',rem:'rgba(52,211,153,.6)'};
+  const c=document.createElement('div');
+  c.className='phase-chip'; c.style.background=col[phase]||'var(--border)';
+  c.title={awake:'Éveil',light:'Léger',deep:'Profond',rem:'REM'}[phase];
+  chips.appendChild(c);
+  if(chips.children.length>80)chips.removeChild(chips.firstChild);
+}
+
+// ── NOISE CHART ──────────────────────────────────────────────
+function initNoiseChart(){
+  const ctx=document.getElementById('chart-noise').getContext('2d');
+  if(noiseChart)noiseChart.destroy();
+  noiseChart=new Chart(ctx,{type:'line',data:{labels:[],datasets:[{label:'Bruit',data:[],borderColor:'rgba(123,156,255,.7)',backgroundColor:'rgba(123,156,255,.08)',borderWidth:1.5,pointRadius:0,tension:.4,fill:true}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false,min:0}}}});
+}
+function updateNoiseChart(t,rms){
+  if(!noiseChart)return;
+  noiseChart.data.labels.push(Math.floor(t/60000)+'min');
+  noiseChart.data.datasets[0].data.push(rms*1000);
+  if(noiseChart.data.labels.length>150){noiseChart.data.labels.shift();noiseChart.data.datasets[0].data.shift();}
+  noiseChart.update('none');
+}
+
+// ── SESSION SUMMARY ──────────────────────────────────────────
+function showSessionSummary(){
+  if(!noiseSamples.length)return;
+  const el=document.getElementById('session-summary'); el.style.display='block';
+  const totalMs=noiseSamples[noiseSamples.length-1].t;
+  const totalMin=Math.round(totalMs/60000);
+  const counts={awake:0,light:0,deep:0,rem:0};
+  phaseHistory.forEach(p=>{if(counts[p]!==undefined)counts[p]++;});
+  const tot=phaseHistory.length||1;
+  const pD=Math.round(counts.deep/tot*100),pL=Math.round(counts.light/tot*100),pR=Math.round(counts.rem/tot*100),pA=Math.round(counts.awake/tot*100);
+  let score=3;
+  if(totalMin>=420)score+=.5; if(pD>=15)score+=.5; if(pR>=15)score+=.5;
+  if(pA>20)score-=1; if(totalMin<300)score-=1;
+  score=Math.max(1,Math.min(5,Math.round(score)));
+  const bar=(lbl,pct,col)=>`<div class="phase-bar-row"><div class="lbl">${lbl}</div><div class="track"><div class="fill" style="width:${pct}%;background:${col}"></div></div><div class="pct">${pct}%</div></div>`;
+  const tips=[];
+  if(totalMin<360)tips.push('⚠ Moins de 6h — couche-toi plus tôt ce soir.');
+  if(pD<10)tips.push('💙 Peu de sommeil profond — évite alcool et écrans le soir.');
+  if(pR<10)tips.push('✨ Peu de REM — le REM augmente en fin de nuit, ne coupe pas ton sommeil.');
+  if(pA>25)tips.push("💭 Beaucoup d'éveil — bruit ou stress à travailler ?");
+  if(!tips.length)tips.push('✓ Belle nuit ! Continue tes bonnes habitudes.');
+  document.getElementById('session-summary-content').innerHTML=`
+    <div class="grid-2" style="margin-bottom:18px">
+      <div class="stat-chip"><div class="stat-val">${Math.floor(totalMin/60)}h${String(totalMin%60).padStart(2,'0')}</div><div class="stat-label">Durée</div></div>
+      <div class="stat-chip"><div class="stat-val" style="color:var(--moon)">${'★'.repeat(score)}${'☆'.repeat(5-score)}</div><div class="stat-label">Qualité estimée</div></div>
+    </div>
+    <div style="margin-bottom:14px">
+      ${bar('Sommeil profond',pD,'rgba(123,156,255,.7)')}
+      ${bar('Sommeil léger',pL,'rgba(167,139,250,.7)')}
+      ${bar('REM',pR,'rgba(52,211,153,.7)')}
+      ${bar('Éveil',pA,'rgba(248,113,113,.5)')}
+    </div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.8;background:var(--surface);border-radius:6px;padding:14px;border:1px solid var(--border)">${tips.join('<br>')}</div>`;
+  el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function saveSessionAsEntry(){
+  if(!noiseSamples.length||!recStartBedtime)return;
+  const totalMs=noiseSamples[noiseSamples.length-1].t;
+  const totalMin=Math.round(totalMs/60000);
+  const counts={awake:0,light:0,deep:0,rem:0};
+  phaseHistory.forEach(p=>{if(counts[p]!==undefined)counts[p]++;});
+  const tot=phaseHistory.length||1;
+  const pD=Math.round(counts.deep/tot*100),pR=Math.round(counts.rem/tot*100),pA=Math.round(counts.awake/tot*100);
+  let score=3;
+  if(totalMin>=420)score+=.5;if(pD>=15)score+=.5;if(pR>=15)score+=.5;
+  if(pA>20)score-=1;if(totalMin<300)score-=1;
+  score=Math.max(1,Math.min(5,Math.round(score)));
+  const [bh,bm]=recStartBedtime.split(':').map(Number);
+  const wm2=(bh*60+bm+totalMin)%1440;
+  const wakeStr=String(Math.floor(wm2/60)).padStart(2,'0')+':'+String(wm2%60).padStart(2,'0');
+  const entry={id:Date.now(),date:new Date().toISOString().split('T')[0],bedtime:recStartBedtime,waketime:wakeStr,duration:totalMin,latency:15,wakeups:Math.max(0,Math.round(counts.awake/4)),quality:score,moods:[],dream:null,sport:null,screens:null,alcohol:0,stress:2,other:['📱 Suivi micro auto'],note:`Auto — Profond:${pD}% Léger:${Math.round(counts.light/tot*100)}% REM:${pR}% Éveil:${pA}%`};
+  entries.unshift(entry);saveData(entries);
+  showToast('✓ Sauvegardé dans le journal !');showPage('dashboard');
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{ initForm(); renderDashboard(); calcCycles(); calcBedtimes(); });
+</script>
+</body>
+</html>

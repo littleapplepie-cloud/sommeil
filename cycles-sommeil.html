@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cycles de Sommeil</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07080f;--surface:#0e1020;--card:#141828;--border:#1f2440;
+  --accent:#a78bfa;--gold:#f0c060;--teal:#3dd6a0;--rose:#f472b6;
+  --text:#eeeaf8;--muted:#6b6890;--r:14px;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Courier New',Courier,monospace;
+  min-height:100vh;overflow-x:hidden;
+}
+
+/* Starfield */
+.stars-bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.star{position:absolute;border-radius:50%;background:white;animation:twinkle var(--d) ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:var(--o1)}50%{opacity:var(--o2)}}
+
+/* Glow */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 50% 40% at 20% 10%,rgba(100,80,200,.12) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 50% at 80% 90%,rgba(60,200,160,.07) 0%,transparent 60%);
+}
+
+#app{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:0 18px 80px}
+
+/* HEADER */
+header{text-align:center;padding:52px 0 40px}
+.moon-big{font-size:64px;line-height:1;margin-bottom:20px;filter:drop-shadow(0 0 24px rgba(240,192,96,.4));animation:moonFloat 4s ease-in-out infinite}
+@keyframes moonFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+header h1{font-size:clamp(28px,6vw,42px);font-weight:400;letter-spacing:-.01em;line-height:1.1;margin-bottom:10px}
+header h1 em{font-style:italic;color:var(--gold)}
+header p{font-size:12px;color:var(--muted);line-height:1.8;max-width:400px;margin:0 auto}
+
+/* SECTION */
+.section-title{
+  font-size:10px;letter-spacing:4px;text-transform:uppercase;
+  color:var(--muted);margin:36px 0 16px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-title::before,.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* CARD */
+.card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);padding:22px;margin-bottom:14px;
+  box-shadow:0 4px 24px rgba(0,0,0,.3);
+}
+.card-emoji{font-size:22px;margin-bottom:10px;display:block}
+.card-label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.card-big{font-size:clamp(36px,7vw,52px);font-weight:400;line-height:1;color:var(--gold);font-family:Georgia,serif}
+.card-sub{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.6}
+
+/* TIME INPUT */
+.time-wrap{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:14px 18px;
+  display:flex;align-items:center;justify-content:center;
+  gap:0;margin-bottom:14px;
+}
+.time-wrap input[type=time]{
+  background:transparent;border:none;outline:none;
+  font-family:Georgia,serif;font-size:42px;font-weight:400;
+  color:var(--text);text-align:center;width:100%;
+  -webkit-tap-highlight-color:transparent;
+}
+.time-wrap input[type=time]::-webkit-calendar-picker-indicator{filter:invert(.5);cursor:pointer}
+
+/* SLIDER SIMPLE */
+.slider-block{margin-bottom:22px}
+.slider-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.slider-name{font-size:12px;color:var(--text)}
+.slider-cur{font-family:Georgia,serif;font-size:22px;color:var(--accent)}
+.slider-unit{font-size:11px;color:var(--muted);margin-left:3px}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;
+  height:5px;border-radius:3px;background:var(--border);
+  outline:none;cursor:pointer;padding:0;border:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:22px;height:22px;
+  border-radius:50%;background:var(--accent);cursor:pointer;
+  border:3px solid var(--bg);box-shadow:0 0 10px rgba(167,139,250,.5);
+}
+.slider-hints{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:5px}
+
+/* RESULT CARDS */
+.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.result-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:16px;text-align:center;
+  transition:border-color .2s,transform .2s;cursor:default;
+}
+.result-card.best{border-color:var(--teal);box-shadow:0 0 16px rgba(61,214,160,.12)}
+.result-card.best .r-time{color:var(--teal)}
+.result-card .r-time{font-family:Georgia,serif;font-size:28px;color:var(--text);line-height:1;margin-bottom:4px}
+.result-card .r-cycles{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
+.result-card .r-dur{font-size:11px;color:var(--muted);margin-top:3px}
+.result-card .r-best{font-size:10px;color:var(--teal);margin-top:4px}
+
+/* TIMELINE */
+.timeline-outer{
+  background:rgba(0,0,0,.4);border-radius:10px;
+  overflow:hidden;height:52px;position:relative;
+  margin:14px 0 6px;border:1px solid var(--border);
+}
+.tl-seg{position:absolute;height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.55);transition:opacity .2s}
+.tl-seg:hover{opacity:.8}
+.seg-laten{background:rgba(244,114,182,.3)}
+.seg-light{background:rgba(167,139,250,.35)}
+.seg-deep{background:rgba(91,127,220,.65)}
+.seg-rem{background:rgba(61,214,160,.5)}
+.tl-time-row{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:5px}
+.legend-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)}
+.legend-dot{width:10px;height:10px;border-radius:2px}
+
+/* CYCLE DOTS */
+.cycle-dots{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:12px 0 6px}
+.cycle-dot{
+  width:34px;height:34px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-family:Georgia,serif;
+  border:2px solid var(--border);color:var(--muted);
+  background:var(--surface);transition:all .3s;
+}
+.cycle-dot.active{background:rgba(167,139,250,.15);border-color:var(--accent);color:var(--accent)}
+.cycle-dot.best-wake{background:rgba(61,214,160,.15);border-color:var(--teal);color:var(--teal)}
+.cycle-label{font-size:10px;color:var(--muted);margin-top:4px}
+
+/* CHART */
+.chart-wrap{position:relative;height:180px;margin:8px 0}
+
+/* PHASE BARS */
+.phase-bars{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.pb-row{display:flex;align-items:center;gap:10px}
+.pb-label{min-width:120px;font-size:11px;color:var(--muted)}
+.pb-track{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.pb-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.pb-val{min-width:40px;text-align:right;font-size:11px;color:var(--text)}
+
+/* SCORE */
+.score-wrap{display:flex;align-items:center;gap:20px;padding:4px 0}
+.score-ring-svg{flex-shrink:0}
+.score-text .score-num{font-family:Georgia,serif;font-size:44px;line-height:1;color:var(--text)}
+.score-text .score-lbl{font-size:12px;color:var(--muted);margin-top:4px}
+.score-text .score-emoji{font-size:20px;margin-top:4px}
+
+/* INFO BOX */
+.info-box{
+  background:rgba(167,139,250,.07);border:1px solid rgba(167,139,250,.2);
+  border-radius:10px;padding:16px;margin-bottom:12px;
+}
+.info-box .ib-icon{font-size:18px;margin-bottom:8px}
+.info-box .ib-title{font-size:12px;color:var(--text);margin-bottom:4px;font-weight:500}
+.info-box .ib-desc{font-size:11px;color:var(--muted);line-height:1.8}
+
+/* TOGGLE TABS */
+.toggle-wrap{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:5px;margin-bottom:16px}
+.toggle-btn{padding:10px;font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:transparent;border:none;cursor:pointer;border-radius:7px;color:var(--muted);transition:all .2s;-webkit-tap-highlight-color:transparent}
+.toggle-btn.on{background:var(--card);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.3)}
+
+/* ADVICE */
+.advice{border-left:3px solid var(--accent);padding:12px 14px;background:rgba(167,139,250,.06);border-radius:0 8px 8px 0;margin-bottom:10px;font-size:12px;color:var(--muted);line-height:1.8}
+.advice strong{color:var(--text);display:block;margin-bottom:3px}
+
+/* ANIMATIONS */
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeIn .4s ease both}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- Stars -->
+<div class="stars-bg" id="stars-bg"></div>
+
+<div id="app">
+
+<header>
+  <div class="moon-big">🌙</div>
+  <h1>Cycles de<br><em>Sommeil</em></h1>
+  <p>Dis-moi à quelle heure tu te couches, et je te dis à quelle heure te réveiller pour être au top.</p>
+</header>
+
+<!-- ══ MODE TOGGLE ══ -->
+<div class="toggle-wrap">
+  <button class="toggle-btn on" id="mode-btn-sleep" ontouchstart="setMode('sleep')" onclick="setMode('sleep')">🌙 Je me couche à…</button>
+  <button class="toggle-btn" id="mode-btn-wake" ontouchstart="setMode('wake')" onclick="setMode('wake')">☀️ Je me lève à…</button>
+</div>
+
+<!-- ══ INPUT ══ -->
+<div class="card">
+  <div class="card-label" id="input-label">À quelle heure tu te couches ?</div>
+  <div class="time-wrap">
+    <input type="time" id="main-time" value="23:00" oninput="compute()">
+  </div>
+
+  <div class="slider-block">
+    <div class="slider-top">
+      <span class="slider-name">⏱ Temps pour t'endormir</span>
+      <span class="slider-cur"><span id="latency-val">15</span><span class="slider-unit">min</span></span>
+    </div>
+    <input type="range" min="0" max="60" value="15" id="latency" oninput="document.getElementById('latency-val').textContent=this.value;compute()">
+    <div class="slider-hints"><span>0 min</span><span>60 min</span></div>
+  </div>
+</div>
+
+<!-- ══ RÉSULTATS ══ -->
+<div class="section-title">Heures idéales</div>
+
+<div class="card">
+  <div class="card-label" id="results-label">Se réveiller à…</div>
+  <div id="cycle-dots-wrap" class="cycle-dots"></div>
+  <div class="cycle-label" id="cycle-label-text"></div>
+  <div class="results-grid" id="results-grid"></div>
+  <div class="info-box" style="margin-top:8px;margin-bottom:0">
+    <div class="ib-icon">💡</div>
+    <div class="ib-desc">Chaque cycle dure <strong style="color:var(--text)">90 minutes</strong>. Se réveiller <em>entre</em> deux cycles = tu te sens reposé·e. Se réveiller <em>au milieu</em> d'un cycle = sensation de gueule de bois au réveil.</div>
+  </div>
+</div>
+
+<!-- ══ TIMELINE ══ -->
+<div class="section-title">Ta nuit visualisée</div>
+
+<div class="card">
+  <div class="card-label">Timeline — <span style="color:var(--accent)" id="timeline-subtitle">5 cycles · 7h30</span></div>
+  <div class="timeline-outer" id="timeline"></div>
+  <div class="tl-time-row"><span id="tl-s">—</span><span id="tl-m">—</span><span id="tl-e">—</span></div>
+  <div class="legend-row">
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(244,114,182,.5)"></div>Endormissement</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(167,139,250,.5)"></div>Sommeil léger</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(91,127,220,.8)"></div>Sommeil profond</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(61,214,160,.6)"></div>REM</div>
+  </div>
+</div>
+
+<!-- ══ GRAPHIQUE ══ -->
+<div class="section-title">Courbe de la nuit</div>
+
+<div class="card">
+  <div class="card-label">Profondeur du sommeil au fil du temps</div>
+  <div class="chart-wrap"><canvas id="hypno-chart"></canvas></div>
+  <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6">En bas = sommeil profond. En haut = éveil. Les vagues = les cycles.</div>
+</div>
+
+<!-- ══ RÉPARTITION ══ -->
+<div class="section-title">Répartition des phases</div>
+
+<div class="card">
+  <div class="phase-bars" id="phase-bars"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px">
+    <div style="background:var(--surface);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sommeil effectif</div>
+      <div style="font-family:Georgia,serif;font-size:26px;color:var(--teal)" id="stat-sleep">—</div>
+    </div>
+    <div style="background:var(--surface);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Score de nuit</div>
+      <div style="font-family:Georgia,serif;font-size:26px;color:var(--gold)" id="stat-score">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONSEILS ══ -->
+<div class="section-title">Conseils pour toi</div>
+<div id="advice-list"></div>
+
+<!-- ══ LES PHASES EXPLIQUÉES ══ -->
+<div class="section-title">C'est quoi les phases ?</div>
+
+<div class="card">
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div class="info-box" style="border-color:rgba(244,114,182,.25);background:rgba(244,114,182,.05)">
+      <div class="ib-icon">😴</div>
+      <div class="ib-title">Endormissement (quelques minutes)</div>
+      <div class="ib-desc">Tu glisses entre l'éveil et le sommeil. Facile à réveiller. C'est ici que tu veux te réveiller le matin — c'est pour ça que les cycles de 90 min sont importants.</div>
+    </div>
+    <div class="info-box" style="border-color:rgba(167,139,250,.25)">
+      <div class="ib-icon">💤</div>
+      <div class="ib-title">Sommeil léger (~50% de la nuit)</div>
+      <div class="ib-desc">Le plus présent dans la nuit. Ton corps se repose, ton cerveau reste un peu actif. Se réveiller ici = pas trop difficile.</div>
+    </div>
+    <div class="info-box" style="border-color:rgba(91,127,220,.35);background:rgba(91,127,220,.06)">
+      <div class="ib-icon">🌊</div>
+      <div class="ib-title">Sommeil profond (~20% — surtout début de nuit)</div>
+      <div class="ib-desc">Ton corps se répare, ton immunité se renforce, ton énergie se recharge. Se réveiller ici = gueule de bois, tu te sens K.O. C'est le plus précieux.</div>
+    </div>
+    <div class="info-box" style="border-color:rgba(61,214,160,.25);background:rgba(61,214,160,.05)">
+      <div class="ib-icon">✨</div>
+      <div class="ib-title">REM — Sommeil paradoxal (~20% — surtout fin de nuit)</div>
+      <div class="ib-desc">Tu rêves. Ton cerveau consolide tes souvenirs et régule tes émotions. Se lever tôt coupe surtout ce stade — c'est pour ça que se lever à 5h même après 6h de sommeil n'est pas pareil que 7h.</div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ── STARS ────────────────────────────────────────────────────
+(function(){
+  const bg = document.getElementById('stars-bg');
+  for(let i=0;i<120;i++){
+    const s = document.createElement('div');
+    s.className = 'star';
+    const size = Math.random()*2+.5;
+    const o1 = (Math.random()*.4+.1).toFixed(2);
+    const o2 = (Math.random()*.15).toFixed(2);
+    s.style.cssText = `width:${size}px;height:${size}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${(Math.random()*4+2).toFixed(1)}s;--o1:${o1};--o2:${o2};animation-delay:${(Math.random()*5).toFixed(1)}s`;
+    bg.appendChild(s);
+  }
+})();
+
+// ── STATE ────────────────────────────────────────────────────
+let mode = 'sleep'; // 'sleep' = je connais l'heure de coucher, 'wake' = je connais l'heure de réveil
+let hypnoChart = null;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-btn-sleep').classList.toggle('on', m==='sleep');
+  document.getElementById('mode-btn-wake').classList.toggle('on', m==='wake');
+  document.getElementById('input-label').textContent = m==='sleep' ? 'À quelle heure tu te couches ?' : 'À quelle heure tu dois te lever ?';
+  document.getElementById('results-label').textContent = m==='sleep' ? 'Se réveiller à…' : 'Se coucher à…';
+  document.getElementById('main-time').value = m==='sleep' ? '23:00' : '07:00';
+  compute();
+}
+
+// ── UTILS ────────────────────────────────────────────────────
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtMin(m){
+  if(!m && m!==0) return '—';
+  const h=Math.floor(m/60), mn=m%60;
+  return h>0 ? h+'h'+(mn>0?pad(mn):'') : mn+'min';
+}
+function addMins(time, mins){
+  const [h,m] = time.split(':').map(Number);
+  const total = (h*60+m+mins+1440)%1440;
+  return pad(Math.floor(total/60))+':'+pad(total%60);
+}
+function subMins(time, mins){ return addMins(time, -mins); }
+
+// ── COMPUTE ──────────────────────────────────────────────────
+function compute(){
+  const time    = document.getElementById('main-time').value || (mode==='sleep'?'23:00':'07:00');
+  const latency = parseInt(document.getElementById('latency').value)||15;
+  const CYCLE   = 90;
+
+  if(mode==='sleep'){
+    // Heures de réveil
+    const sleepStart = addMins(time, latency);
+    const options = [3,4,5,6].map(c=>({
+      cycles: c,
+      wakeTime: addMins(sleepStart, c*CYCLE),
+      sleepMins: c*CYCLE,
+      totalMins: latency + c*CYCLE,
+    }));
+    renderResults(options, 'sleep', time);
+    renderTimeline(time, latency, 5, CYCLE);
+    renderHypno(time, latency, 5, CYCLE);
+    renderPhases(latency, 5, CYCLE);
+    renderAdvice(latency, 5*CYCLE);
+    document.getElementById('cycle-label-text').textContent = 'Glisse sur un cycle pour voir le détail';
+  } else {
+    // Heures de coucher
+    const options = [4,5,6].map(c=>({
+      cycles: c,
+      bedTime: subMins(time, latency + c*CYCLE),
+      sleepMins: c*CYCLE,
+      totalMins: latency + c*CYCLE,
+    }));
+    renderResultsBed(options, time);
+    renderTimeline(options[1].bedTime||'23:00', latency, 5, CYCLE);
+    renderHypno(options[1].bedTime||'23:00', latency, 5, CYCLE);
+    renderPhases(latency, 5, CYCLE);
+    renderAdvice(latency, 5*CYCLE);
+  }
+}
+
+// ── RENDER RESULTS (mode sleep) ──────────────────────────────
+function renderResults(options, m, bedtime){
+  const grid = document.getElementById('results-grid');
+  const dots = document.getElementById('cycle-dots-wrap');
+
+  // Cycle dots
+  dots.innerHTML = options.map(o=>{
+    const isBest = o.cycles===5;
+    return `<div class="cycle-dot ${isBest?'best-wake':o.cycles>=4?'active':''}">${o.cycles}<br><span style="font-size:8px">cyc.</span></div>`;
+  }).join('<div style="font-size:16px;color:var(--muted)">·</div>');
+
+  grid.innerHTML = options.map(o=>{
+    const best = o.cycles===5;
+    return `<div class="result-card ${best?'best':''}">
+      <div class="r-time">${o.wakeTime}</div>
+      <div class="r-cycles">${o.cycles} cycles</div>
+      <div class="r-dur">${fmtMin(o.sleepMins)} de sommeil</div>
+      ${best?'<div class="r-best">✓ Idéal</div>':''}
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER RESULTS (mode wake) ───────────────────────────────
+function renderResultsBed(options, waketime){
+  const grid = document.getElementById('results-grid');
+  const dots = document.getElementById('cycle-dots-wrap');
+  dots.innerHTML = options.map(o=>{
+    const isBest = o.cycles===5;
+    return `<div class="cycle-dot ${isBest?'best-wake':'active'}">${o.cycles}<br><span style="font-size:8px">cyc.</span></div>`;
+  }).join('<div style="font-size:16px;color:var(--muted)">·</div>');
+  grid.innerHTML = options.map(o=>{
+    const best = o.cycles===5;
+    return `<div class="result-card ${best?'best':''}">
+      <div class="r-time">${o.bedTime}</div>
+      <div class="r-cycles">${o.cycles} cycles</div>
+      <div class="r-dur">${fmtMin(o.sleepMins)} de sommeil</div>
+      ${best?'<div class="r-best">✓ Idéal</div>':''}
+    </div>`;
+  }).join('');
+}
+
+// ── TIMELINE ────────────────────────────────────────────────
+function renderTimeline(bedtime, latency, numCycles, CYCLE){
+  const total = latency + numCycles*CYCLE;
+  const tl = document.getElementById('timeline');
+  tl.innerHTML='';
+
+  const segs=[];
+  segs.push({type:'laten',dur:latency});
+  for(let c=0;c<numCycles;c++){
+    const deepFactor = Math.max(.15, 1-c*.18);
+    const remFactor  = Math.min(2.2, 1+c*.35);
+    const deep  = Math.round(CYCLE*.2*deepFactor);
+    const rem   = Math.round(CYCLE*.2*remFactor);
+    const light = CYCLE-deep-rem;
+    segs.push({type:'light',dur:Math.round(light*.45)});
+    segs.push({type:'deep', dur:deep});
+    segs.push({type:'light',dur:Math.round(light*.35)});
+    segs.push({type:'rem',  dur:rem});
+    segs.push({type:'light',dur:Math.round(light*.2)});
+  }
+
+  let elapsed=0;
+  segs.forEach(s=>{
+    if(s.dur<=0)return;
+    const pct=s.dur/total*100;
+    const d=document.createElement('div');
+    d.className='tl-seg seg-'+s.type;
+    d.style.left=(elapsed/total*100)+'%';
+    d.style.width=pct+'%';
+    if(pct>6) d.textContent={laten:'ÉVEIL',light:'LGR',deep:'PROF',rem:'REM'}[s.type];
+    d.title={laten:'Endormissement',light:'Sommeil léger',deep:'Sommeil profond',rem:'REM'}[s.type]+' — '+s.dur+'min';
+    tl.appendChild(d);
+    elapsed+=s.dur;
+  });
+
+  document.getElementById('tl-s').textContent = bedtime;
+  document.getElementById('tl-m').textContent = addMins(bedtime, Math.round(total/2));
+  document.getElementById('tl-e').textContent = addMins(bedtime, total);
+  document.getElementById('timeline-subtitle').textContent = numCycles+' cycles · '+fmtMin(numCycles*CYCLE);
+}
+
+// ── HYPNOGRAM ────────────────────────────────────────────────
+function renderHypno(bedtime, latency, numCycles, CYCLE){
+  const total = latency + numCycles*CYCLE;
+  const [bh,bm] = bedtime.split(':').map(Number);
+  const startMin = bh*60+bm;
+
+  // Build points
+  const pts=[];
+  const depthMap={laten:4,light:2,deep:0,rem:3};
+  const segs=[];
+  segs.push({type:'laten',dur:latency});
+  for(let c=0;c<numCycles;c++){
+    const deepFactor=Math.max(.15,1-c*.18);
+    const remFactor=Math.min(2.2,1+c*.35);
+    const deep=Math.round(CYCLE*.2*deepFactor);
+    const rem=Math.round(CYCLE*.2*remFactor);
+    const light=CYCLE-deep-rem;
+    segs.push({type:'light',dur:Math.round(light*.45)});
+    segs.push({type:'deep', dur:deep});
+    segs.push({type:'light',dur:Math.round(light*.35)});
+    segs.push({type:'rem',  dur:rem});
+    segs.push({type:'light',dur:Math.round(light*.2)});
+  }
+  let elapsed=0;
+  segs.forEach(s=>{
+    pts.push({x:elapsed,y:depthMap[s.type]});
+    elapsed+=s.dur;
+    pts.push({x:elapsed,y:depthMap[s.type]});
+  });
+
+  const ctx=document.getElementById('hypno-chart').getContext('2d');
+  if(hypnoChart)hypnoChart.destroy();
+  hypnoChart=new Chart(ctx,{
+    type:'line',
+    data:{datasets:[{
+      data:pts.map(p=>({x:p.x,y:p.y})),
+      borderColor:'rgba(167,139,250,.8)',
+      backgroundColor:(c)=>{
+        const g=c.chart.ctx.createLinearGradient(0,0,0,180);
+        g.addColorStop(0,'rgba(167,139,250,.02)');
+        g.addColorStop(1,'rgba(167,139,250,.2)');
+        return g;
+      },
+      borderWidth:2,pointRadius:0,stepped:'before',fill:true,
+    }]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'#141828',borderColor:'#1f2440',borderWidth:1,
+        titleColor:'#eeeaf8',bodyColor:'#6b6890',
+        callbacks:{label:c=>{const l=['Sommeil profond','','Sommeil léger','REM','Éveil'];return l[c.parsed.y]||'';}}
+      }},
+      scales:{
+        x:{type:'linear',min:0,max:total,
+          ticks:{color:'#6b6890',font:{family:'Courier New',size:10},stepSize:90,
+            callback:v=>{const m=(startMin+v)%1440;return pad(Math.floor(m/60))+'h'+(m%60!==0?pad(m%60):'');}},
+          grid:{color:'rgba(255,255,255,.04)'}},
+        y:{min:-.5,max:4.5,
+          ticks:{color:'#6b6890',font:{family:'Courier New',size:10},stepSize:1,
+            callback:v=>['Profond','','Léger','REM','Éveil'][v]||''},
+          grid:{color:'rgba(255,255,255,.04)'}},
+      }
+    }
+  });
+}
+
+// ── PHASES ───────────────────────────────────────────────────
+function renderPhases(latency, numCycles, CYCLE){
+  const total = latency + numCycles*CYCLE;
+  const sleep = numCycles*CYCLE;
+  // Rough estimates
+  let deep=0,rem=0,light=0;
+  for(let c=0;c<numCycles;c++){
+    deep  += Math.round(CYCLE*.2*Math.max(.15,1-c*.18));
+    rem   += Math.round(CYCLE*.2*Math.min(2.2,1+c*.35));
+  }
+  light = sleep-deep-rem;
+  const awake = latency;
+
+  document.getElementById('stat-sleep').textContent = fmtMin(sleep);
+
+  const score = calcScore(sleep, deep/sleep*100, rem/sleep*100, latency, 0);
+  document.getElementById('stat-score').textContent = score+'/100';
+
+  const phases=[
+    {label:'😴 Endormissement',min:awake,   color:'rgba(244,114,182,.7)',pct:Math.round(awake/total*100)},
+    {label:'💤 Sommeil léger', min:light,   color:'rgba(167,139,250,.7)',pct:Math.round(light/total*100)},
+    {label:'🌊 Sommeil profond',min:deep,   color:'rgba(91,127,220,.85)',pct:Math.round(deep/total*100)},
+    {label:'✨ REM',            min:rem,    color:'rgba(61,214,160,.75)',pct:Math.round(rem/total*100)},
+  ];
+
+  document.getElementById('phase-bars').innerHTML = phases.map(p=>`
+    <div class="pb-row">
+      <div class="pb-label">${p.label}</div>
+      <div class="pb-track"><div class="pb-fill" style="width:${p.pct}%;background:${p.color}"></div></div>
+      <div class="pb-val">${fmtMin(p.min)}</div>
+    </div>`).join('');
+}
+
+// ── SCORE ────────────────────────────────────────────────────
+function calcScore(sleep, pctDeep, pctREM, latency, wakeups){
+  let s=100;
+  if(sleep<300)s-=30; else if(sleep<360)s-=20; else if(sleep<420)s-=10;
+  if(pctDeep<10)s-=20; else if(pctDeep>=15&&pctDeep<=25)s+=3;
+  if(pctREM<10)s-=15; else if(pctREM>=20)s+=3;
+  if(latency>45)s-=15; else if(latency>30)s-=8;
+  s-=wakeups*4;
+  return Math.max(0,Math.min(100,Math.round(s)));
+}
+
+// ── ADVICE ───────────────────────────────────────────────────
+function renderAdvice(latency, sleepMins){
+  const tips=[];
+  if(sleepMins<360)
+    tips.push({t:'Tu dors moins de 6h',d:'C\'est un peu court ! Essaie de te coucher 90 minutes plus tôt — tu ajouteras un cycle complet et tu te réveilleras tellement mieux.'});
+  else if(sleepMins>=420&&sleepMins<=480)
+    tips.push({t:'Durée parfaite ✓',d:`${fmtMin(sleepMins)} de sommeil, c'est exactement dans la plage recommandée pour un adulte. Continue comme ça !`});
+  else if(sleepMins>540)
+    tips.push({t:'Tu dors beaucoup',d:'Plus de 9h régulièrement peut indiquer une dette de sommeil à récupérer ou de la fatigue chronique. Si c\'est souvent le cas, parles-en à ton médecin.'});
+
+  if(latency>30)
+    tips.push({t:'Tu mets du temps à t\'endormir',d:'Plus de 30 minutes pour t\'endormir, c\'est un signal. Essaie : pas d\'écran 1h avant, chambre à 18–19°C, respiration lente. Le but c\'est 10–20 minutes.'});
+  else if(latency<=10)
+    tips.push({t:'Tu t\'endors très vite',d:'S\'endormir en moins de 5 minutes peut indiquer une dette de sommeil. Idéalement, l\'endormissement prend 10–20 minutes.'});
+
+  if(sleepMins>=360&&sleepMins<420)
+    tips.push({t:'Presque suffisant',d:'6h de sommeil c\'est bien mais pas optimal pour la plupart des gens. Essaie d\'ajouter un demi-cycle (45 min) ou un cycle complet (90 min).'});
+
+  tips.push({t:'La règle des 90 minutes',d:'Le truc le plus simple à retenir : dors toujours par multiples de 90 min. 4×90 = 6h, 5×90 = 7h30, 6×90 = 9h. Un réveil en fin de cycle = tu te lèves frais·fraîche, même avec moins de sommeil qu\'un réveil en plein milieu d\'un cycle.'});
+
+  document.getElementById('advice-list').innerHTML = tips.map(t=>`
+    <div class="advice fade">
+      <strong>${t.t}</strong>${t.d}
+    </div>`).join('');
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+compute();
+</script>
+</body>
+</html>
